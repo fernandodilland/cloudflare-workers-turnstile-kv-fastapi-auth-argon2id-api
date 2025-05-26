@@ -1,0 +1,22 @@
+name = "secure-auth-api"
+main = "src/main.py"
+compatibility_date = "2024-01-01"
+
+[env.production]
+name = "secure-auth-api-prod"
+
+[env.staging]
+name = "secure-auth-api-staging"
+
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "your-kv-namespace-id"
+preview_id = "your-preview-kv-namespace-id"
+
+[vars]
+ENVIRONMENT = "production"
+
+[secrets]
+# These will be set via wrangler secret commands
+# TURNSTILE_SECRET_KEY
+# JWT_SECRET_KEY
