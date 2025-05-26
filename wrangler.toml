@@ -1,6 +1,7 @@
 name = "secure-auth-api"
 main = "src/main.py"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["python_workers"]
 
 [env.production]
 name = "secure-auth-api-prod"
@@ -10,13 +11,12 @@ name = "secure-auth-api-staging"
 
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "your-kv-namespace-id"
-preview_id = "your-preview-kv-namespace-id"
+id = "c8976d0499124c8bae3e857aacef5988"
+preview_id = "f9d31120a43b469a8ff4fd25b1fd2d61"
 
 [vars]
 ENVIRONMENT = "production"
 
-[secrets]
-# These will be set via wrangler secret commands:
-# TURNSTILE_SECRET_KEY - Cloudflare Turnstile secret key
-# JWT_SECRET_KEY - Secret key for JWT token signing
+# Secrets are set using wrangler secret commands:
+# npx wrangler secret put TURNSTILE_SECRET_KEY
+# npx wrangler secret put JWT_SECRET_KEY

@@ -1,2 +1,3 @@
-fastapi>=0.104.0
-pydantic>=2.5.0
+# Python Workers currently support only standard library modules
+# External packages like FastAPI are only available in local development
+# For production deployment, we use the standard library only

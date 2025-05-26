@@ -4,35 +4,57 @@ import base64
 import json
 import time
 from urllib.parse import urlencode
-import urllib.request
 from typing import Optional
 
 async def verify_turnstile(token: str, secret_key: str) -> bool:
     """
-    Verify Cloudflare Turnstile token
+    Verify Cloudflare Turnstile token using Workers fetch API
     """
     if not token or not secret_key:
         return False
     
     try:
-        # Prepare data for Turnstile verification
-        data = {
-            'secret': secret_key,
-            'response': token
-        }
-        
-        # Make request to Turnstile API
-        req_data = urlencode(data).encode('utf-8')
-        req = urllib.request.Request(
-            'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-            data=req_data,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
-        )
-        
-        with urllib.request.urlopen(req) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            return result.get('success', False)
+        # Use Workers fetch API (available via js module in Workers runtime)
+        try:
+            from js import fetch
+        except ImportError:
+            # Fallback for local development
+            import urllib.request
             
+            data = {
+                'secret': secret_key,
+                'response': token
+            }
+            
+            req_data = urlencode(data).encode('utf-8')
+            req = urllib.request.Request(
+                'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+                data=req_data,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            )
+            
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get('success', False)
+        
+        # Use Workers fetch in production
+        from pyodide.ffi import to_js
+        from js import Object
+        
+        form_data = Object.fromEntries([
+            ['secret', secret_key],
+            ['response', token]
+        ])
+        
+        response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            'method': 'POST',
+            'headers': {'Content-Type': 'application/x-www-form-urlencoded'},
+            'body': form_data
+        })
+        
+        result = await response.json()
+        return result.success if hasattr(result, 'success') else False
+        
     except Exception:
         return False
 
