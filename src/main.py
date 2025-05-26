@@ -18,9 +18,9 @@ from pyodide.ffi import to_js as _to_js
 import json
 import time
 from urllib.parse import urlparse, parse_qs
-from .auth import verify_turnstile, verify_password, generate_jwt
-from .utils import get_user_from_kv
-from .models import LoginRequest, LoginResponse
+from auth import verify_turnstile, verify_password, generate_jwt
+from utils import get_user_from_kv
+from models import LoginRequest, LoginResponse
 
 
 def to_js(obj):
