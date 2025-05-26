@@ -11,8 +11,8 @@ name = "secure-auth-api-staging"
 
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "c8976d0499124c8bae3e857aacef5988"
-preview_id = "f9d31120a43b469a8ff4fd25b1fd2d61"
+id = "7e996370b45b48ccacf62e18b9caa619"
+preview_id = "7e996370b45b48ccacf62e18b9caa619"
 
 [vars]
 ENVIRONMENT = "production"

@@ -188,9 +188,11 @@ async def on_fetch(request, env, ctx):
                 status=404
             )        
         # Add CORS headers to response
-        for key, value in cors_headers.items():
-            response.headers.set(key, value)
-        
+        if hasattr(response, "headers") and isinstance(response.headers, dict):
+            response.headers.update(cors_headers)
+        else:
+            response.headers = dict(cors_headers)
+
         return response
         
     except Exception as e:
@@ -200,14 +202,17 @@ async def on_fetch(request, env, ctx):
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, cf-turnstile-token",
         }
-        
+
         # Return error response with CORS headers
         error_response = Response.json(
             to_js({"error": "Internal server error"}),
             status=500
         )
-        
-        for key, value in cors_headers.items():
-            error_response.headers.set(key, value)
-        
+
+        # Asignar los headers CORS directamente
+        if hasattr(error_response, "headers") and isinstance(error_response.headers, dict):
+            error_response.headers.update(cors_headers)
+        else:
+            error_response.headers = dict(cors_headers)
+
         return error_response
