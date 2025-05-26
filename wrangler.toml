@@ -17,6 +17,6 @@ preview_id = "your-preview-kv-namespace-id"
 ENVIRONMENT = "production"
 
 [secrets]
-# These will be set via wrangler secret commands
-# TURNSTILE_SECRET_KEY
-# JWT_SECRET_KEY
+# These will be set via wrangler secret commands:
+# TURNSTILE_SECRET_KEY - Cloudflare Turnstile secret key
+# JWT_SECRET_KEY - Secret key for JWT token signing

@@ -1,79 +1,128 @@
 # Secure Auth API - Cloudflare Workers
 
-API de autenticación segura usando Cloudflare Workers con Python, FastAPI, Turnstile, Argon2id y JWT.
+Secure authentication API using Cloudflare Workers with Python, FastAPI, Turnstile, Argon2id, and JWT.
 
-## Características
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/fernandodilland/cloudflare-workers-turnstile-kv-fastapi-auth-argon2id-api)
 
-- ✅ Validación con Cloudflare Turnstile
-- ✅ Autenticación con Argon2id
-- ✅ Generación de JWT
-- ✅ Storage en Workers KV
-- ✅ FastAPI con Python
+> **One-click deployment!** Use the button above to deploy this application directly to your Cloudflare account. Required resources (KV namespaces) will be automatically created and everything will be configured for you.
 
-## Prerequisitos
+## Features
 
-1. Cuenta de Cloudflare con Workers habilitado
-2. Node.js y npm instalados
-3. Wrangler CLI instalado: `npm install -g wrangler`
+- ✅ Cloudflare Turnstile validation
+- ✅ Argon2id authentication
+- ✅ JWT token generation
+- ✅ Workers KV storage
+- ✅ FastAPI with Python
 
-## Configuración
+## Prerequisites
 
-### 1. Instalar Wrangler y hacer login
+1. Cloudflare account with Workers enabled
+2. Node.js and npm installed (for manual setup only)
+3. Wrangler CLI installed (for manual setup only): `npm install -g wrangler`
+
+## Quick Deployment (Recommended)
+
+### Option 1: Deploy to Cloudflare (One-click)
+
+Click the **Deploy to Cloudflare** button above to:
+
+- ✅ Automatically clone this repository to your GitHub account
+- ✅ Automatically create required KV namespaces
+- ✅ Configure the Worker with all dependencies
+- ✅ Deploy the application to your Cloudflare account
+
+**Post-deployment configuration:**
+
+After automatic deployment, you only need to configure the secrets:
+
+1. **Configure Turnstile:**
+   - Go to [Cloudflare Dashboard > Turnstile](https://dash.cloudflare.com/profile/api-tokens)
+   - Create a new site and get the Site Key and Secret Key
+
+2. **Configure Worker Secrets:**
+   ```bash
+   # Turnstile secret key
+   wrangler secret put TURNSTILE_SECRET_KEY
+   
+   # JWT signing key (generate a strong random key)
+   wrangler secret put JWT_SECRET_KEY
+   ```
+
+3. **Create test user:**
+   ```bash
+   wrangler kv:key put --binding=USERS_KV "user:testuser" '{"id":"user123","username":"testuser","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$abcdefghijklmnop$qrstuvwxyzABCDEF","created_at":"2024-01-01T00:00:00Z"}'
+   ```
+
+### Option 2: Manual Setup
+
+If you prefer to configure everything manually, follow these steps:
+
+#### 1. Install Wrangler and login
 
 ```bash
 npm install -g wrangler
 wrangler login
 ```
 
-### 2. Crear KV Namespace
+#### 2. Create KV Namespace
 
 ```bash
 wrangler kv:namespace create "USERS_KV"
 wrangler kv:namespace create "USERS_KV" --preview
 ```
 
-Actualiza el `wrangler.toml` con los IDs generados.
+Update `wrangler.toml` with the generated IDs.
 
-### 3. Configurar Turnstile
+#### 3. Configure Turnstile
 
-1. Ve a Cloudflare Dashboard > Turnstile
-2. Crea un nuevo sitio
-3. Obtén las claves Site Key y Secret Key
+1. Go to Cloudflare Dashboard > Turnstile
+2. Create a new site
+3. Get Site Key and Secret Key
 
-### 4. Configurar Secrets
+#### 4. Configure Secrets
 
 ```bash
-# Clave secreta de Turnstile
+# Turnstile secret key
 wrangler secret put TURNSTILE_SECRET_KEY
 
-# Clave para firmar JWT
+# JWT signing key
 wrangler secret put JWT_SECRET_KEY
 ```
 
-### 5. Crear usuario de prueba
+#### 5. Create test user
 
 ```bash
-# Crear usuario en KV
+# Create user in KV
 wrangler kv:key put --binding=USERS_KV "user:testuser" '{"id":"user123","username":"testuser","password_hash":"$argon2id$v=19$m=65536,t=3,p=4$abcdefghijklmnop$qrstuvwxyzABCDEF","created_at":"2024-01-01T00:00:00Z"}'
 ```
 
-## Despliegue
+#### 6. Manual deployment
 
-### 1. Desplegar a staging
+**Deploy to staging:**
 
 ```bash
 wrangler deploy --env staging
 ```
 
-### 2. Desplegar a producción
+**Deploy to production:**
 
 ```bash
 wrangler deploy --env production
 ```
 
-## Uso de la API
+## Local Development
 
-### Endpoint de Login
+```bash
+# Run in development mode
+wrangler dev
+
+# With local KV
+wrangler dev --local
+```
+
+## API Usage
+
+### Login Endpoint
 
 ```bash
 curl -X POST "https://your-worker.your-subdomain.workers.dev/auth/login" \
@@ -85,7 +134,7 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev/auth/login" \
   }'
 ```
 
-### Respuesta exitosa
+### Successful Response
 
 ```json
 {
@@ -96,9 +145,9 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev/auth/login" \
 }
 ```
 
-## Estructura de datos en KV
+## KV Data Structure
 
-### Usuario en KV
+### User in KV
 
 ```json
 {
@@ -110,29 +159,47 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev/auth/login" \
 }
 ```
 
-## Seguridad
+## Security
 
-- Las contraseñas se almacenan con hash Argon2id
-- Validación obligatoria de Turnstile
-- JWT firmado con clave secreta
-- Tokens con expiración de 1 hora
+- Passwords are stored with Argon2id hash
+- Mandatory Turnstile validation
+- JWT signed with secret key
+- Tokens with 1-hour expiration
 
-## Monitoreo
+## Monitoring
 
 ```bash
-# Ver logs en tiempo real
+# View real-time logs
 wrangler tail
 
-# Ver métricas
+# View metrics
 wrangler metrics
 ```
 
-## Desarrollo local
+## Local Development
 
 ```bash
-# Ejecutar en modo desarrollo
+# Run in development mode
 wrangler dev
 
-# Con KV local
+# With local KV
 wrangler dev --local
 ```
+
+## Deploy to Cloudflare
+
+This project includes a **Deploy to Cloudflare** button that allows:
+
+- 🚀 **One-click deployment**: No need to manually clone the repository
+- 🔧 **Automatic configuration**: KV namespaces are created automatically
+- 📦 **Managed resources**: All dependencies are configured automatically
+- 🔄 **Automatic fork**: A copy of the repository is created in your GitHub account
+
+### What happens when you click "Deploy to Cloudflare"?
+
+1. **Repository fork**: A copy is created in your GitHub/GitLab account
+2. **Project configuration**: You can customize the Worker name and other details
+3. **Resource provisioning**: Required KV namespaces are automatically created
+4. **Build & Deploy**: The application is built and deployed to the Cloudflare network
+
+> **Important note**: Remember to configure the secrets (TURNSTILE_SECRET_KEY and JWT_SECRET_KEY) after automatic deployment for the application to work correctly.
