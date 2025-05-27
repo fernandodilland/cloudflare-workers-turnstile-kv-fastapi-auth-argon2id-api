@@ -1,0 +1,13 @@
+{
+	"name": "cloudflare-workers-turnstile-kv-rust-auth-argon2id-api",
+	"version": "1.0.0",
+	"private": true,
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"build": "cargo install -q worker-build && worker-build --release"
+	},
+	"devDependencies": {
+		"wrangler": "^4.5.0"
+	}
+}

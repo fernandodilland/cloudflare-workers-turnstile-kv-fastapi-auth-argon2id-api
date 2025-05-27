@@ -1,0 +1,20 @@
+name = "cloudflare-workers-turnstile-kv-rust-auth-argon2id-api"
+main = "build/worker/shim.mjs"
+compatibility_date = "2025-05-26"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "80f6e5a1605a4732a194fe5fa35a02a4"
+preview_id = "f0ad13adc8f24959a6340e1f3a474350"
+
+[vars]
+JWT_EXPIRATION_MINUTES = "15"
+
+[env.production]
+vars = { JWT_EXPIRATION_MINUTES = "15" }
+
+[env.staging]
+vars = { JWT_EXPIRATION_MINUTES = "30" }
