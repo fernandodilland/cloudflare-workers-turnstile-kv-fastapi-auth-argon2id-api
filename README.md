@@ -18,6 +18,7 @@ Before starting, make sure you have:
 - [ ] **Workers Plan enabled** (Free tier included)
 - [ ] **Node.js** (version 18 or higher) - [Download](https://nodejs.org)
 - [ ] **Rust** installed - [Install](https://rustup.rs/)
+- [ ] **LLVM** installed - [Download](https://releases.llvm.org/download.html) or install via package manager
 - [ ] **Git** installed - [Download](https://git-scm.com/)
 
 ### ⚡ Quick Installation
