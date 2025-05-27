@@ -27,3 +27,9 @@ pub struct UserData {
     pub password_hash: String,
     pub created_at: i64,
 }
+
+#[derive(Serialize)]
+pub struct DeleteResponse {
+    pub success: bool,
+    pub message: String,
+}

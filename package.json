@@ -2,12 +2,48 @@
 	"name": "cloudflare-workers-turnstile-kv-rust-auth-argon2id-api",
 	"version": "1.0.0",
 	"private": true,
+	"description": "Secure authentication API built with Cloudflare Workers and Rust",
+	"main": "src/lib.rs",
 	"scripts": {
-		"dev": "wrangler dev",
+		"build": "cargo install -q worker-build && worker-build --release",
 		"deploy": "wrangler deploy",
-		"build": "cargo install -q worker-build && worker-build --release"
+		"dev": "wrangler dev",
+		"dev:remote": "wrangler dev --remote",
+		"deploy:staging": "wrangler deploy --env staging",
+		"deploy:production": "wrangler deploy --env production",
+		"setup": "node -e \"console.log('Run setup.ps1 on Windows or setup.sh on Unix systems')\"",
+		"kv:create": "wrangler kv:namespace create USERS_KV && wrangler kv:namespace create USERS_KV --preview",
+		"secret:set": "echo 'Run: wrangler secret put TURNSTILE_SECRET_KEY && wrangler secret put JWT_SECRET'",
+		"logs": "wrangler tail",
+		"logs:staging": "wrangler tail --env staging",
+		"logs:production": "wrangler tail --env production",
+		"test": "echo 'Update test_api.ps1 or test_api.sh with your Worker URL and run the script'"
 	},
+	"keywords": [
+		"cloudflare",
+		"workers",
+		"rust",
+		"authentication",
+		"api",
+		"turnstile",
+		"jwt",
+		"argon2",
+		"kv"
+	],
+	"author": "Your Name",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/YOUR_USERNAME/cloudflare-workers-turnstile-kv-rust-auth-argon2id-api.git"
+	},
+	"bugs": {
+		"url": "https://github.com/YOUR_USERNAME/cloudflare-workers-turnstile-kv-rust-auth-argon2id-api/issues"
+	},
+	"homepage": "https://github.com/YOUR_USERNAME/cloudflare-workers-turnstile-kv-rust-auth-argon2id-api#readme",
 	"devDependencies": {
 		"wrangler": "^4.5.0"
+	},
+	"engines": {
+		"node": ">=18.0.0"
 	}
 }

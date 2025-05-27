@@ -1,20 +1,48 @@
+# Cloudflare Workers Rust Auth API
+# Configuration file for Wrangler deployment tool
+
 name = "cloudflare-workers-turnstile-kv-rust-auth-argon2id-api"
 main = "build/worker/shim.mjs"
 compatibility_date = "2025-05-26"
 
+# Custom build command for Rust Workers
 [build]
 command = "cargo install -q worker-build && worker-build --release"
 
+# KV Namespace for user storage
+# IMPORTANT: Replace these placeholder IDs with your actual KV namespace IDs
+# Create KV namespaces in Cloudflare Dashboard > Workers & Pages > KV
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "80f6e5a1605a4732a194fe5fa35a02a4"
-preview_id = "f0ad13adc8f24959a6340e1f3a474350"
+# Replace with your production KV namespace ID
+id = "YOUR_PRODUCTION_KV_NAMESPACE_ID"
+# Replace with your preview KV namespace ID (for wrangler dev --remote)
+preview_id = "YOUR_PREVIEW_KV_NAMESPACE_ID"
 
+# Environment variables (non-sensitive configuration)
 [vars]
 JWT_EXPIRATION_MINUTES = "15"
 
+# Production environment configuration
 [env.production]
 vars = { JWT_EXPIRATION_MINUTES = "15" }
 
+# IMPORTANT: Set these secrets via Wrangler CLI or Dashboard:
+# wrangler secret put TURNSTILE_SECRET_KEY --env production
+# wrangler secret put JWT_SECRET --env production
+
+# Staging environment configuration
 [env.staging]
 vars = { JWT_EXPIRATION_MINUTES = "30" }
+
+# IMPORTANT: Set these secrets via Wrangler CLI or Dashboard:
+# wrangler secret put TURNSTILE_SECRET_KEY --env staging
+# wrangler secret put JWT_SECRET --env staging
+
+# Development environment configuration
+[env.development]
+vars = { JWT_EXPIRATION_MINUTES = "60" }
+
+# For local development, create a .dev.vars file with:
+# TURNSTILE_SECRET_KEY=your_turnstile_secret_key_here
+# JWT_SECRET=your_jwt_secret_key_here

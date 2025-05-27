@@ -4,6 +4,7 @@
 
 $API_URL = "https://your-worker.your-subdomain.workers.dev"
 $TURNSTILE_TOKEN = "your_turnstile_token_here"
+$JWT_TOKEN = "" # Will be filled after login
 
 Write-Host "Testing Health Endpoint..."
 try {
@@ -43,6 +44,28 @@ try {
 
     $response = Invoke-RestMethod -Uri "$API_URL/login" -Method Post -Headers $headers -Body $body
     $response | ConvertTo-Json
+    
+    # Save JWT token for delete test
+    if ($response.success -and $response.token) {
+        $JWT_TOKEN = $response.token
+        Write-Host "JWT Token saved for delete test"
+    }
 } catch {
     Write-Host "Error: $($_.Exception.Message)"
+}
+
+Write-Host "`nTesting Delete User Endpoint..."
+if ($JWT_TOKEN) {
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $JWT_TOKEN"
+        }
+
+        $response = Invoke-RestMethod -Uri "$API_URL/user" -Method Delete -Headers $headers
+        $response | ConvertTo-Json
+    } catch {
+        Write-Host "Error: $($_.Exception.Message)"
+    }
+} else {
+    Write-Host "Skipping delete test - no JWT token available"
 }

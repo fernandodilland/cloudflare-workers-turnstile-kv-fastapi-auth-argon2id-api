@@ -3,7 +3,7 @@ use argon2::{
     Argon2,
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{encode, decode, DecodingKey, EncodingKey, Header, Validation};
 use worker::*;
 
 mod turnstile;
@@ -11,16 +11,15 @@ mod auth;
 mod kv_store;
 
 use turnstile::verify_turnstile_token;
-use auth::{LoginRequest, LoginResponse, Claims, UserData};
-use kv_store::{get_user_from_kv, store_user_in_kv};
+use auth::{LoginRequest, LoginResponse, Claims, UserData, DeleteResponse};
+use kv_store::{get_user_from_kv, store_user_in_kv, delete_user_from_kv};
 
 #[event(fetch)]
-async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    // Enable CORS for all requests
+async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {    // Enable CORS for all requests
     let cors_headers = [
         ("Access-Control-Allow-Origin", "*"),
-        ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-        ("Access-Control-Allow-Headers", "Content-Type, cf-turnstile-response"),
+        ("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+        ("Access-Control-Allow-Headers", "Content-Type, cf-turnstile-response, Authorization"),
     ];
 
     // Handle preflight requests
@@ -32,11 +31,10 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 }
                 res
             });
-    }
-
-    let result = match (req.method(), req.path().as_ref()) {
+    }    let result = match (req.method(), req.path().as_ref()) {
         (Method::Post, "/login") => login_handler(req, env).await,
         (Method::Post, "/register") => register_handler(req, env).await,
+        (Method::Delete, "/user") => delete_user_handler(req, env).await,
         (Method::Get, "/health") => health_handler().await,
         _ => Err(Error::InvalidRoute),
     };
@@ -196,12 +194,64 @@ async fn register_handler(mut req: Request, env: Env) -> std::result::Result<Res
     };
 
     store_user_in_kv(&env, &register_req.user, &user_data).await
-        .map_err(|_| Error::KvStoreError)?;
-
-    Response::from_json(&serde_json::json!({
+        .map_err(|_| Error::KvStoreError)?;    Response::from_json(&serde_json::json!({
         "success": true,
         "message": "User registered successfully"
     })).map_err(|err| Error::EncodeBody(err.to_string()))
+}
+
+async fn verify_jwt_token(token: &str, secret: &str) -> std::result::Result<Claims, Box<dyn std::error::Error>> {
+    let validation = Validation::default();
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_ref()),
+        &validation,
+    )?;
+    Ok(token_data.claims)
+}
+
+async fn delete_user_handler(req: Request, env: Env) -> std::result::Result<Response, Error> {
+    // Get JWT token from Authorization header
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .map_err(|_| Error::MissingAuthToken)?
+        .ok_or(Error::MissingAuthToken)?;
+
+    // Extract token from "Bearer <token>" format
+    let token = if auth_header.starts_with("Bearer ") {
+        &auth_header[7..]
+    } else {
+        return Err(Error::InvalidAuthFormat);
+    };
+
+    // Get JWT secret from environment
+    let jwt_secret = env
+        .secret("JWT_SECRET")
+        .map_err(|_| Error::MissingJwtSecret)?
+        .to_string();
+
+    // Verify and decode JWT token
+    let claims = verify_jwt_token(token, &jwt_secret).await
+        .map_err(|_| Error::InvalidJwtToken)?;
+
+    // Check if token is expired
+    let current_time = Utc::now().timestamp() as usize;
+    if claims.exp < current_time {
+        return Err(Error::ExpiredJwtToken);
+    }
+
+    // Delete user from KV store
+    delete_user_from_kv(&env, &claims.sub).await
+        .map_err(|_| Error::UserNotFound)?;
+
+    let response = DeleteResponse {
+        success: true,
+        message: format!("User '{}' deleted successfully", claims.sub),
+    };
+
+    Response::from_json(&response)
+        .map_err(|err| Error::EncodeBody(err.to_string()))
 }
 
 async fn health_handler() -> std::result::Result<Response, Error> {
@@ -228,6 +278,10 @@ enum Error {
     JwtGeneration(String),
     UserNotFound,
     KvStoreError,
+    MissingAuthToken,
+    InvalidAuthFormat,
+    InvalidJwtToken,
+    ExpiredJwtToken,
 }
 
 impl Error {
@@ -264,9 +318,20 @@ impl Error {
             }
             Error::UserNotFound => {
                 Response::error("Invalid credentials", 401)
-            }
-            Error::KvStoreError => {
+            }            Error::KvStoreError => {
                 Response::error("Internal server error", 500)
+            }
+            Error::MissingAuthToken => {
+                Response::error("Missing Authorization header", 401)
+            }
+            Error::InvalidAuthFormat => {
+                Response::error("Invalid Authorization format. Use 'Bearer <token>'", 401)
+            }
+            Error::InvalidJwtToken => {
+                Response::error("Invalid JWT token", 401)
+            }
+            Error::ExpiredJwtToken => {
+                Response::error("JWT token has expired", 401)
             }
         }
     }

@@ -20,3 +20,16 @@ pub async fn store_user_in_kv(env: &Env, username: &str, user_data: &UserData) -
     kv.put(username, user_data_json)?.execute().await?;
     Ok(())
 }
+
+pub async fn delete_user_from_kv(env: &Env, username: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let kv = env.kv("USERS_KV")?;
+    
+    // Check if user exists first
+    match kv.get(username).text().await? {
+        Some(_) => {
+            kv.delete(username).await?;
+            Ok(())
+        }
+        None => Err("User not found".into())
+    }
+}
