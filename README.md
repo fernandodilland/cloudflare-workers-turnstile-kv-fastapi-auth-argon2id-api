@@ -5,8 +5,23 @@ A secure authentication API built with Cloudflare Workers and Rust featuring:
 - ✅ **Bot Protection**: Cloudflare Turnstile verification
 - ✅ **Secure Storage**: User data stored in Cloudflare KV
 - ✅ **Password Security**: Argon2id password hashing
-- ✅ **JWT Authentication**: Configurable token expiration
+- ✅ **Enhanced JWT Security**: Unique 512-bit JWT secrets per user
+- ✅ **Automatic Token Invalidation**: Tokens expire when passwords change
 - ✅ **Global Scale**: Leverages Cloudflare's edge network
+
+## 🔐 Security Features
+
+### **Per-User JWT Secrets**
+Each user has their own unique 512-bit (64 bytes) JWT secret key that:
+- **Automatically rotates** when password or username changes
+- **Invalidates all existing tokens** on credential changes
+- **Eliminates global JWT compromise risk** - no single point of failure
+- **Provides true token isolation** between users
+
+### **Enhanced Token Security**
+- JWT version tracking prevents token reuse after rotation
+- Automatic token invalidation on security-sensitive operations
+- No global JWT secret configuration needed
 
 ## 🚀 Setup and Installation
 

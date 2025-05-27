@@ -27,17 +27,15 @@ JWT_EXPIRATION_MINUTES = "15"
 [env.production]
 vars = { JWT_EXPIRATION_MINUTES = "15" }
 
-# IMPORTANT: Set these secrets via Wrangler CLI or Dashboard:
+# IMPORTANT: Set this secret via Wrangler CLI or Dashboard:
 # wrangler secret put TURNSTILE_SECRET_KEY --env production
-# wrangler secret put JWT_SECRET --env production
 
 # Staging environment configuration
 [env.staging]
 vars = { JWT_EXPIRATION_MINUTES = "30" }
 
-# IMPORTANT: Set these secrets via Wrangler CLI or Dashboard:
+# IMPORTANT: Set this secret via Wrangler CLI or Dashboard:
 # wrangler secret put TURNSTILE_SECRET_KEY --env staging
-# wrangler secret put JWT_SECRET --env staging
 
 # Development environment configuration
 [env.development]

@@ -93,29 +93,25 @@ try {
 if (-not (Test-Path ".dev.vars")) {
     Write-Status "Creando archivo .dev.vars..."
     Copy-Item ".dev.vars.example" ".dev.vars"
-    Write-Warning "IMPORTANTE: Edita .dev.vars con tus claves reales"
+    Write-Warning "IMPORTANTE: Edita .dev.vars con tu clave real"
     Write-Warning "- TURNSTILE_SECRET_KEY: De Cloudflare Dashboard > Turnstile"
-    Write-Warning "- JWT_SECRET: Usa el generado abajo o crea uno nuevo"
+    Write-Warning "- JWT secrets ahora se generan automáticamente por usuario (512-bit)"
 } else {
     Write-Warning ".dev.vars ya existe, no se sobrescribirá"
 }
-
-# Generate a JWT secret
-Write-Status "Generando clave JWT de ejemplo..."
-$bytes = New-Object byte[] 32
-[Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($bytes)
-$jwtSecret = [Convert]::ToBase64String($bytes)
-Write-Host "Clave JWT generada: $jwtSecret" -ForegroundColor Magenta
-Write-Warning "Guarda esta clave en un lugar seguro y úsala para JWT_SECRET"
 
 Write-Host ""
 Write-Success "✅ Configuración inicial completa!"
 Write-Host ""
 Write-Warning "Pasos siguientes:"
 Write-Host "1. 🔑 Configura Turnstile en Cloudflare Dashboard" -ForegroundColor White
-Write-Host "2. 📝 Edita .dev.vars con tus claves reales" -ForegroundColor White
+Write-Host "2. 📝 Edita .dev.vars con tu clave TURNSTILE_SECRET_KEY" -ForegroundColor White
 Write-Host "3. 🚀 Ejecuta: npm run dev" -ForegroundColor White
 Write-Host "4. 🌐 Para producción: wrangler secret put TURNSTILE_SECRET_KEY" -ForegroundColor White
-Write-Host "5. 🔐 Para producción: wrangler secret put JWT_SECRET" -ForegroundColor White
+Write-Host ""
+Write-Success "🔐 MEJORA DE SEGURIDAD: JWT secrets únicos por usuario"
+Write-Host "- Cada usuario tiene su propia clave JWT de 512-bit" -ForegroundColor Green
+Write-Host "- Los tokens se invalidan automáticamente al cambiar contraseña" -ForegroundColor Green
+Write-Host "- No se requiere JWT_SECRET global" -ForegroundColor Green
 Write-Host ""
 Write-Status "Ver SETUP.md para instrucciones detalladas"

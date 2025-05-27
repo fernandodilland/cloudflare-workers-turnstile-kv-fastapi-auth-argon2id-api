@@ -68,27 +68,25 @@ print_success "wrangler.toml actualizado"
 if [ ! -f .dev.vars ]; then
     print_status "Creando archivo .dev.vars..."
     cp .dev.vars.example .dev.vars
-    print_warning "IMPORTANTE: Edita .dev.vars con tus claves reales"
+    print_warning "IMPORTANTE: Edita .dev.vars con tu clave real"
     print_warning "- TURNSTILE_SECRET_KEY: De Cloudflare Dashboard > Turnstile"
-    print_warning "- JWT_SECRET: Genera uno con: openssl rand -base64 32"
+    print_warning "- JWT secrets ahora se generan automáticamente por usuario (512-bit)"
 else
     print_warning ".dev.vars ya existe, no se sobrescribirá"
 fi
-
-# Generate a JWT secret
-print_status "Generando clave JWT de ejemplo..."
-JWT_SECRET=$(openssl rand -base64 32)
-echo "Clave JWT generada: $JWT_SECRET"
-print_warning "Guarda esta clave en un lugar seguro y úsala para JWT_SECRET"
 
 echo ""
 print_success "✅ Configuración inicial completa!"
 echo ""
 print_warning "Pasos siguientes:"
 echo "1. 🔑 Configura Turnstile en Cloudflare Dashboard"
-echo "2. 📝 Edita .dev.vars con tus claves reales"
+echo "2. 📝 Edita .dev.vars con tu clave TURNSTILE_SECRET_KEY"
 echo "3. 🚀 Ejecuta: npm run dev"
 echo "4. 🌐 Para producción: wrangler secret put TURNSTILE_SECRET_KEY"
-echo "5. 🔐 Para producción: wrangler secret put JWT_SECRET"
+echo ""
+print_success "🔐 MEJORA DE SEGURIDAD: JWT secrets únicos por usuario"
+echo "- Cada usuario tiene su propia clave JWT de 512-bit"
+echo "- Los tokens se invalidan automáticamente al cambiar contraseña"
+echo "- No se requiere JWT_SECRET global"
 echo ""
 print_status "Ver SETUP.md para instrucciones detalladas"

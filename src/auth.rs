@@ -19,6 +19,7 @@ pub struct Claims {
     pub sub: String, // Subject (username)
     pub exp: usize,  // Expiration time
     pub iat: usize,  // Issued at
+    pub ver: u32,    // JWT version for invalidation
 }
 
 #[derive(Serialize, Deserialize)]
@@ -26,6 +27,8 @@ pub struct UserData {
     pub username: String,
     pub password_hash: String,
     pub created_at: i64,
+    pub jwt_secret: String, // Base64 encoded 512-bit (64 bytes) unique JWT secret
+    pub jwt_version: u32,   // Version to invalidate tokens when rotated
 }
 
 #[derive(Serialize)]

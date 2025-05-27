@@ -2,6 +2,26 @@
 
 Este documento explica cómo configurar el proyecto para desarrollo y producción.
 
+## 🔐 Sistema de Seguridad JWT Mejorado
+
+### **Características de Seguridad Avanzadas**
+
+Este proyecto implementa un sistema de JWT con seguridad mejorada:
+
+- **JWT Secrets Únicos por Usuario**: Cada usuario tiene su propia clave JWT de 512-bit
+- **Rotación Automática**: Las claves JWT se rotan automáticamente cuando:
+  - Se cambia la contraseña del usuario
+  - Se cambia el nombre de usuario
+- **Invalidación Inmediata**: Los tokens existentes se invalidan automáticamente en cambios de credenciales
+- **Sin Secreto Global**: No se requiere configurar `JWT_SECRET` global
+
+### **Beneficios de Seguridad**
+
+1. **Aislamiento Total**: Compromiso de un token no afecta otros usuarios
+2. **Rotación Automática**: Elimina la necesidad de rotación manual de secretos
+3. **Respuesta a Incidentes**: Cambio de contraseña invalida inmediatamente todos los tokens
+4. **Configuración Simplificada**: Un secreto menos que gestionar en producción
+
 ## Configuración Inicial
 
 ### 1. KV Namespaces
@@ -33,36 +53,33 @@ Estos comandos te darán los IDs que necesitas reemplazar en `wrangler.toml`:
 
 1. Copia el archivo de ejemplo:
 ```bash
-cp .env.example .env.local
-# o
 cp .dev.vars.example .dev.vars
 ```
 
-2. Edita `.dev.vars` con tus valores reales:
+2. Edita `.dev.vars` con tu valor real:
 ```bash
 TURNSTILE_SECRET_KEY=tu_clave_secreta_de_turnstile
-JWT_SECRET=tu_clave_jwt_muy_segura_de_al_menos_32_caracteres
+# Nota: JWT_SECRET ya no es necesario - se genera automáticamente por usuario
 ```
 
 #### Producción
 
-Configura los secretos usando Wrangler CLI:
+Configura el secreto usando Wrangler CLI:
 
 ```bash
 # Para producción
 wrangler secret put TURNSTILE_SECRET_KEY --env production
-wrangler secret put JWT_SECRET --env production
 
-# Para staging
+# Para staging  
 wrangler secret put TURNSTILE_SECRET_KEY --env staging
-wrangler secret put JWT_SECRET --env staging
 ```
 
 O usa el Dashboard de Cloudflare:
 1. Ve a Workers & Pages > Tu Worker > Settings
-2. En "Variables and Secrets", añade los secretos:
+2. En "Variables and Secrets", añade el secreto:
    - `TURNSTILE_SECRET_KEY`: Tu clave secreta de Turnstile
-   - `JWT_SECRET`: Una clave fuerte para firmar JWT (mínimo 32 caracteres)
+
+**Nota**: `JWT_SECRET` ya no es necesario - el sistema genera automáticamente claves JWT únicas de 512-bit para cada usuario.
 
 ## Comandos de Desarrollo
 

@@ -13,7 +13,7 @@
 		"deploy:production": "wrangler deploy --env production",
 		"setup": "node -e \"console.log('Run setup.ps1 on Windows or setup.sh on Unix systems')\"",
 		"kv:create": "wrangler kv:namespace create USERS_KV && wrangler kv:namespace create USERS_KV --preview",
-		"secret:set": "echo 'Run: wrangler secret put TURNSTILE_SECRET_KEY && wrangler secret put JWT_SECRET'",
+		"secret:set": "echo 'Run: wrangler secret put TURNSTILE_SECRET_KEY (JWT secrets are now auto-generated per user)'",
 		"logs": "wrangler tail",
 		"logs:staging": "wrangler tail --env staging",
 		"logs:production": "wrangler tail --env production",

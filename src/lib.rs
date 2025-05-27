@@ -5,6 +5,8 @@ use argon2::{
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, decode, DecodingKey, EncodingKey, Header, Validation};
 use worker::*;
+use rand_core::RngCore;
+use base64::{Engine as _, engine::general_purpose};
 
 mod turnstile;
 mod auth;
@@ -13,6 +15,55 @@ mod kv_store;
 use turnstile::verify_turnstile_token;
 use auth::{LoginRequest, LoginResponse, Claims, UserData, DeleteResponse, UpdateUserRequest, UpdateUserResponse};
 use kv_store::{get_user_from_kv, store_user_in_kv, delete_user_from_kv, update_user_in_kv};
+
+// Generate a secure 512-bit (64 bytes) JWT secret key
+fn generate_jwt_secret() -> String {
+    let mut secret = [0u8; 64]; // 512 bits = 64 bytes
+    OsRng.fill_bytes(&mut secret);
+    general_purpose::STANDARD.encode(secret)
+}
+
+// Generate JWT token using user's unique secret
+fn generate_jwt_token(user_data: &UserData, jwt_expiration_minutes: i64) -> std::result::Result<String, Box<dyn std::error::Error>> {
+    let now = Utc::now();
+    let expiration = now + Duration::minutes(jwt_expiration_minutes);
+      let claims = Claims {
+        sub: user_data.username.clone(),
+        exp: expiration.timestamp() as usize,
+        iat: now.timestamp() as usize,
+        ver: user_data.jwt_version,
+    };
+
+    let secret_bytes = general_purpose::STANDARD.decode(&user_data.jwt_secret)?;
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(&secret_bytes),
+    )?;
+
+    Ok(token)
+}
+
+// Verify JWT token using user's unique secret
+async fn verify_jwt_token_with_user_secret(
+    token: &str, 
+    user_data: &UserData
+) -> std::result::Result<Claims, Box<dyn std::error::Error>> {
+    let secret_bytes = general_purpose::STANDARD.decode(&user_data.jwt_secret)?;
+    
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(&secret_bytes),
+        &Validation::default(),
+    )?;
+
+    // Verify JWT version matches current user version
+    if token_data.claims.ver != user_data.jwt_version {
+        return Err("Token version mismatch - token has been invalidated".into());
+    }
+
+    Ok(token_data.claims)
+}
 
 #[event(fetch)]
 async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -96,34 +147,14 @@ async fn login_handler(mut req: Request, env: Env) -> std::result::Result<Respon
     let argon2 = Argon2::default();
     match argon2.verify_password(login_req.password.as_bytes(), &password_hash) {
         Ok(()) => {
-            // Password is correct, generate JWT
-            let jwt_secret = env
-                .secret("JWT_SECRET")
-                .map_err(|_| Error::MissingJwtSecret)?
-                .to_string();
-
+            // Password is correct, generate JWT using user's unique secret
             let expiration_minutes = env
                 .var("JWT_EXPIRATION_MINUTES")
                 .map(|v| v.to_string().parse::<i64>().unwrap_or(15))
                 .unwrap_or(15);
 
-            let exp = Utc::now()
-                .checked_add_signed(Duration::minutes(expiration_minutes))
-                .expect("valid timestamp")
-                .timestamp() as usize;
-
-            let claims = Claims {
-                sub: login_req.user.clone(),
-                exp,
-                iat: Utc::now().timestamp() as usize,
-            };
-
-            let token = encode(
-                &Header::default(),
-                &claims,
-                &EncodingKey::from_secret(jwt_secret.as_ref()),
-            )
-            .map_err(|err| Error::JwtGeneration(err.to_string()))?;
+            let token = generate_jwt_token(&user_data, expiration_minutes)
+                .map_err(|err| Error::JwtGeneration(err.to_string()))?;
 
             let response = LoginResponse {
                 success: true,
@@ -194,6 +225,8 @@ async fn register_handler(mut req: Request, env: Env) -> std::result::Result<Res
         username: register_req.user.clone(),
         password_hash,
         created_at: Utc::now().timestamp(),
+        jwt_secret: generate_jwt_secret(),
+        jwt_version: 1,
     };    store_user_in_kv(&env, &register_req.user, &user_data).await
         .map_err(|_| Error::KvStoreError)?;
 
@@ -203,14 +236,19 @@ async fn register_handler(mut req: Request, env: Env) -> std::result::Result<Res
     })).map_err(|err| Error::EncodeBody(err.to_string()))
 }
 
-async fn verify_jwt_token(token: &str, secret: &str) -> std::result::Result<Claims, Box<dyn std::error::Error>> {
-    let validation = Validation::default();
+// Extract username from JWT token (without verification)
+fn extract_username_from_token(token: &str) -> std::result::Result<String, Box<dyn std::error::Error>> {
+    // Decode without verification to get the username
+    let mut validation = Validation::default();
+    validation.insecure_disable_signature_validation();
+    
     let token_data = decode::<Claims>(
         token,
-        &DecodingKey::from_secret(secret.as_ref()),
+        &DecodingKey::from_secret("dummy".as_ref()),
         &validation,
     )?;
-    Ok(token_data.claims)
+    
+    Ok(token_data.claims.sub)
 }
 
 async fn delete_user_handler(req: Request, env: Env) -> std::result::Result<Response, Error> {
@@ -228,14 +266,16 @@ async fn delete_user_handler(req: Request, env: Env) -> std::result::Result<Resp
         return Err(Error::InvalidAuthFormat);
     };
 
-    // Get JWT secret from environment
-    let jwt_secret = env
-        .secret("JWT_SECRET")
-        .map_err(|_| Error::MissingJwtSecret)?
-        .to_string();
+    // Extract username from token to get user data
+    let username = extract_username_from_token(token)
+        .map_err(|_| Error::InvalidJwtToken)?;
 
-    // Verify and decode JWT token
-    let claims = verify_jwt_token(token, &jwt_secret).await
+    // Get user from KV store
+    let user_data = get_user_from_kv(&env, &username).await
+        .map_err(|_| Error::UserNotFound)?;
+
+    // Verify JWT token using user's unique secret
+    let claims = verify_jwt_token_with_user_secret(token, &user_data).await
         .map_err(|_| Error::InvalidJwtToken)?;
 
     // Check if token is expired
@@ -246,7 +286,9 @@ async fn delete_user_handler(req: Request, env: Env) -> std::result::Result<Resp
 
     // Delete user from KV store
     delete_user_from_kv(&env, &claims.sub).await
-        .map_err(|_| Error::UserNotFound)?;    let response = DeleteResponse {
+        .map_err(|_| Error::UserNotFound)?;
+
+    let response = DeleteResponse {
         success: true,
         message: format!("User '{}' deleted successfully", claims.sub),
     };
@@ -270,14 +312,16 @@ async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<
         return Err(Error::InvalidAuthFormat);
     };
 
-    // Get JWT secret from environment
-    let jwt_secret = env
-        .secret("JWT_SECRET")
-        .map_err(|_| Error::MissingJwtSecret)?
-        .to_string();
+    // Extract username from token to get user data
+    let username = extract_username_from_token(token)
+        .map_err(|_| Error::InvalidJwtToken)?;
 
-    // Verify and decode JWT token
-    let claims = verify_jwt_token(token, &jwt_secret).await
+    // Get user from KV store
+    let mut user_data = get_user_from_kv(&env, &username).await
+        .map_err(|_| Error::UserNotFound)?;
+
+    // Verify JWT token using user's unique secret
+    let claims = verify_jwt_token_with_user_secret(token, &user_data).await
         .map_err(|_| Error::InvalidJwtToken)?;
 
     // Check if token is expired
@@ -302,11 +346,9 @@ async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<
         }).map_err(|err| Error::EncodeBody(err.to_string()));
     }
 
-    // Get current user data
-    let mut user_data = get_user_from_kv(&env, &claims.sub).await
-        .map_err(|_| Error::UserNotFound)?;
+    let mut jwt_rotated = false;
 
-    // Update password if provided
+    // Update password if provided (this rotates JWT)
     if let Some(new_password) = &update_req.new_password {
         // Hash new password with Argon2id
         let salt = SaltString::generate(&mut OsRng);
@@ -317,12 +359,24 @@ async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<
             .map_err(|err| Error::Hash(err.to_string()))?;
         
         user_data.password_hash = password_hash;
+        
+        // Rotate JWT secret and version when password changes (for security)
+        user_data.jwt_secret = generate_jwt_secret();
+        user_data.jwt_version += 1;
+        jwt_rotated = true;
     }
 
-    // Update username in user data if provided
+    // Update username in user data if provided (this also rotates JWT)
     let new_username = update_req.new_username.as_deref();
     if let Some(new_user) = new_username {
         user_data.username = new_user.to_string();
+        
+        // Rotate JWT secret and version when username changes
+        if !jwt_rotated {
+            user_data.jwt_secret = generate_jwt_secret();
+            user_data.jwt_version += 1;
+            jwt_rotated = true;
+        }
     }
 
     // Update user in KV store
@@ -335,30 +389,15 @@ async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<
             }
         })?;
 
-    // Generate new JWT token if username changed
-    let (new_token, expires_in) = if new_username.is_some() && new_username.unwrap() != claims.sub {
+    // Generate new JWT token since we rotated the secret
+    let (new_token, expires_in) = if jwt_rotated {
         let expiration_minutes = env
             .var("JWT_EXPIRATION_MINUTES")
             .map(|v| v.to_string().parse::<i64>().unwrap_or(15))
             .unwrap_or(15);
 
-        let exp = Utc::now()
-            .checked_add_signed(Duration::minutes(expiration_minutes))
-            .expect("valid timestamp")
-            .timestamp() as usize;
-
-        let new_claims = Claims {
-            sub: new_username.unwrap().to_string(),
-            exp,
-            iat: Utc::now().timestamp() as usize,
-        };
-
-        let token = encode(
-            &Header::default(),
-            &new_claims,
-            &EncodingKey::from_secret(jwt_secret.as_ref()),
-        )
-        .map_err(|err| Error::JwtGeneration(err.to_string()))?;
+        let token = generate_jwt_token(&user_data, expiration_minutes)
+            .map_err(|err| Error::JwtGeneration(err.to_string()))?;
 
         (Some(token), Some(expiration_minutes * 60))
     } else {
@@ -366,9 +405,9 @@ async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<
     };
 
     let message = match (update_req.new_username.is_some(), update_req.new_password.is_some()) {
-        (true, true) => "Username and password updated successfully",
-        (true, false) => "Username updated successfully",
-        (false, true) => "Password updated successfully",
+        (true, true) => "Username and password updated successfully. Previous tokens are now invalid.",
+        (true, false) => "Username updated successfully. Previous tokens are now invalid.",
+        (false, true) => "Password updated successfully. Previous tokens are now invalid.",
         (false, false) => unreachable!(), // Already validated above
     };
 
@@ -403,7 +442,6 @@ enum Error {
     MissingTurnstileToken,
     MissingTurnstileSecret,
     InvalidTurnstileToken,
-    MissingJwtSecret,
     JwtGeneration(String),
     UserNotFound,
     KvStoreError,
@@ -436,16 +474,12 @@ impl Error {
             }
             Error::MissingTurnstileSecret => {
                 Response::error("Missing Turnstile secret key in environment", 500)
-            }
-            Error::InvalidTurnstileToken => {
+            }            Error::InvalidTurnstileToken => {
                 Response::error("Invalid Turnstile token", 401)
-            }
-            Error::MissingJwtSecret => {
-                Response::error("Missing JWT secret in environment", 500)
             }
             Error::JwtGeneration(err) => {
                 Response::error(format!("Failed to generate JWT: {}", err), 500)
-            }            Error::UserNotFound => {
+            }Error::UserNotFound => {
                 Response::error("Invalid credentials", 401)
             }
             Error::KvStoreError => {
