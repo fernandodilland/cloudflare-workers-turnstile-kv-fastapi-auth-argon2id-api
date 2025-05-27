@@ -384,6 +384,55 @@ Delete the authenticated user's account.
 }
 ```
 
+### `PATCH /user`
+Update user account information (username and/or password).
+
+**Headers:**
+- `Content-Type: application/json`
+- `Authorization: Bearer <jwt_token>`
+
+**Request Body:**
+```json
+{
+    "new_username": "newusername", // Optional: new username
+    "new_password": "newpassword123" // Optional: new password
+}
+```
+
+**Note:** At least one field (`new_username` or `new_password`) must be provided.
+
+**Response (Password change only):**
+```json
+{
+    "success": true,
+    "message": "Password updated successfully",
+    "new_token": null,
+    "expires_in": null
+}
+```
+
+**Response (Username change):**
+```json
+{
+    "success": true,
+    "message": "Username updated successfully",
+    "new_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 900
+}
+```
+
+**Response (Both username and password change):**
+```json
+{
+    "success": true,
+    "message": "Username and password updated successfully",
+    "new_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 900
+}
+```
+
+**Important:** When changing username, a new JWT token is issued. You must update your stored token with the `new_token` value.
+
 ### `GET /health`
 Check API health status.
 

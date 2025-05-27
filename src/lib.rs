@@ -11,14 +11,15 @@ mod auth;
 mod kv_store;
 
 use turnstile::verify_turnstile_token;
-use auth::{LoginRequest, LoginResponse, Claims, UserData, DeleteResponse};
-use kv_store::{get_user_from_kv, store_user_in_kv, delete_user_from_kv};
+use auth::{LoginRequest, LoginResponse, Claims, UserData, DeleteResponse, UpdateUserRequest, UpdateUserResponse};
+use kv_store::{get_user_from_kv, store_user_in_kv, delete_user_from_kv, update_user_in_kv};
 
 #[event(fetch)]
-async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {    // Enable CORS for all requests
+async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    // Enable CORS for all requests
     let cors_headers = [
         ("Access-Control-Allow-Origin", "*"),
-        ("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"),
+        ("Access-Control-Allow-Methods", "GET, POST, DELETE, PATCH, OPTIONS"),
         ("Access-Control-Allow-Headers", "Content-Type, cf-turnstile-response, Authorization"),
     ];
 
@@ -29,12 +30,14 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {    //
                 for (key, value) in cors_headers.iter() {
                     res.headers_mut().set(key, value).ok();
                 }
-                res
-            });
-    }    let result = match (req.method(), req.path().as_ref()) {
+                res            });
+    }
+
+    let result = match (req.method(), req.path().as_ref()) {
         (Method::Post, "/login") => login_handler(req, env).await,
         (Method::Post, "/register") => register_handler(req, env).await,
         (Method::Delete, "/user") => delete_user_handler(req, env).await,
+        (Method::Patch, "/user") => update_user_handler(req, env).await,
         (Method::Get, "/health") => health_handler().await,
         _ => Err(Error::InvalidRoute),
     };
@@ -191,10 +194,10 @@ async fn register_handler(mut req: Request, env: Env) -> std::result::Result<Res
         username: register_req.user.clone(),
         password_hash,
         created_at: Utc::now().timestamp(),
-    };
+    };    store_user_in_kv(&env, &register_req.user, &user_data).await
+        .map_err(|_| Error::KvStoreError)?;
 
-    store_user_in_kv(&env, &register_req.user, &user_data).await
-        .map_err(|_| Error::KvStoreError)?;    Response::from_json(&serde_json::json!({
+    Response::from_json(&serde_json::json!({
         "success": true,
         "message": "User registered successfully"
     })).map_err(|err| Error::EncodeBody(err.to_string()))
@@ -243,11 +246,137 @@ async fn delete_user_handler(req: Request, env: Env) -> std::result::Result<Resp
 
     // Delete user from KV store
     delete_user_from_kv(&env, &claims.sub).await
-        .map_err(|_| Error::UserNotFound)?;
-
-    let response = DeleteResponse {
+        .map_err(|_| Error::UserNotFound)?;    let response = DeleteResponse {
         success: true,
         message: format!("User '{}' deleted successfully", claims.sub),
+    };
+
+    Response::from_json(&response)
+        .map_err(|err| Error::EncodeBody(err.to_string()))
+}
+
+async fn update_user_handler(mut req: Request, env: Env) -> std::result::Result<Response, Error> {
+    // Get JWT token from Authorization header
+    let auth_header = req
+        .headers()
+        .get("Authorization")
+        .map_err(|_| Error::MissingAuthToken)?
+        .ok_or(Error::MissingAuthToken)?;
+
+    // Extract token from "Bearer <token>" format
+    let token = if auth_header.starts_with("Bearer ") {
+        &auth_header[7..]
+    } else {
+        return Err(Error::InvalidAuthFormat);
+    };
+
+    // Get JWT secret from environment
+    let jwt_secret = env
+        .secret("JWT_SECRET")
+        .map_err(|_| Error::MissingJwtSecret)?
+        .to_string();
+
+    // Verify and decode JWT token
+    let claims = verify_jwt_token(token, &jwt_secret).await
+        .map_err(|_| Error::InvalidJwtToken)?;
+
+    // Check if token is expired
+    let current_time = Utc::now().timestamp() as usize;
+    if claims.exp < current_time {
+        return Err(Error::ExpiredJwtToken);
+    }
+
+    // Parse update request
+    let update_req: UpdateUserRequest = req
+        .json()
+        .await
+        .map_err(|err| Error::DecodeBody(err.to_string()))?;
+
+    // Validate that at least one field is being updated
+    if update_req.new_username.is_none() && update_req.new_password.is_none() {
+        return Response::from_json(&UpdateUserResponse {
+            success: false,
+            message: "At least one field (new_username or new_password) must be provided".to_string(),
+            new_token: None,
+            expires_in: None,
+        }).map_err(|err| Error::EncodeBody(err.to_string()));
+    }
+
+    // Get current user data
+    let mut user_data = get_user_from_kv(&env, &claims.sub).await
+        .map_err(|_| Error::UserNotFound)?;
+
+    // Update password if provided
+    if let Some(new_password) = &update_req.new_password {
+        // Hash new password with Argon2id
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(new_password.as_bytes(), &salt)
+            .map(|password_hash| password_hash.to_string())
+            .map_err(|err| Error::Hash(err.to_string()))?;
+        
+        user_data.password_hash = password_hash;
+    }
+
+    // Update username in user data if provided
+    let new_username = update_req.new_username.as_deref();
+    if let Some(new_user) = new_username {
+        user_data.username = new_user.to_string();
+    }
+
+    // Update user in KV store
+    update_user_in_kv(&env, &claims.sub, new_username, &user_data).await
+        .map_err(|err| {
+            if err.to_string().contains("already exists") {
+                Error::UsernameExists
+            } else {
+                Error::KvStoreError
+            }
+        })?;
+
+    // Generate new JWT token if username changed
+    let (new_token, expires_in) = if new_username.is_some() && new_username.unwrap() != claims.sub {
+        let expiration_minutes = env
+            .var("JWT_EXPIRATION_MINUTES")
+            .map(|v| v.to_string().parse::<i64>().unwrap_or(15))
+            .unwrap_or(15);
+
+        let exp = Utc::now()
+            .checked_add_signed(Duration::minutes(expiration_minutes))
+            .expect("valid timestamp")
+            .timestamp() as usize;
+
+        let new_claims = Claims {
+            sub: new_username.unwrap().to_string(),
+            exp,
+            iat: Utc::now().timestamp() as usize,
+        };
+
+        let token = encode(
+            &Header::default(),
+            &new_claims,
+            &EncodingKey::from_secret(jwt_secret.as_ref()),
+        )
+        .map_err(|err| Error::JwtGeneration(err.to_string()))?;
+
+        (Some(token), Some(expiration_minutes * 60))
+    } else {
+        (None, None)
+    };
+
+    let message = match (update_req.new_username.is_some(), update_req.new_password.is_some()) {
+        (true, true) => "Username and password updated successfully",
+        (true, false) => "Username updated successfully",
+        (false, true) => "Password updated successfully",
+        (false, false) => unreachable!(), // Already validated above
+    };
+
+    let response = UpdateUserResponse {
+        success: true,
+        message: message.to_string(),
+        new_token,
+        expires_in,
     };
 
     Response::from_json(&response)
@@ -282,6 +411,7 @@ enum Error {
     InvalidAuthFormat,
     InvalidJwtToken,
     ExpiredJwtToken,
+    UsernameExists,
 }
 
 impl Error {
@@ -315,10 +445,10 @@ impl Error {
             }
             Error::JwtGeneration(err) => {
                 Response::error(format!("Failed to generate JWT: {}", err), 500)
-            }
-            Error::UserNotFound => {
+            }            Error::UserNotFound => {
                 Response::error("Invalid credentials", 401)
-            }            Error::KvStoreError => {
+            }
+            Error::KvStoreError => {
                 Response::error("Internal server error", 500)
             }
             Error::MissingAuthToken => {
@@ -326,12 +456,14 @@ impl Error {
             }
             Error::InvalidAuthFormat => {
                 Response::error("Invalid Authorization format. Use 'Bearer <token>'", 401)
-            }
-            Error::InvalidJwtToken => {
+            }            Error::InvalidJwtToken => {
                 Response::error("Invalid JWT token", 401)
             }
             Error::ExpiredJwtToken => {
                 Response::error("JWT token has expired", 401)
+            }
+            Error::UsernameExists => {
+                Response::error("Username already exists", 409)
             }
         }
     }

@@ -33,3 +33,17 @@ pub struct DeleteResponse {
     pub success: bool,
     pub message: String,
 }
+
+#[derive(Deserialize)]
+pub struct UpdateUserRequest {
+    pub new_username: Option<String>,
+    pub new_password: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct UpdateUserResponse {
+    pub success: bool,
+    pub message: String,
+    pub new_token: Option<String>, // New JWT token if username changed
+    pub expires_in: Option<i64>,   // Token expiration in seconds
+}
